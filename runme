@@ -111,30 +111,30 @@ class AVLTree(object):
                 for y in self.ascending(x.right):
                     yield y
 
-    def left(self, x=None):
+    def left_descending(self, x=None):
         """Yield nodes less than the given node."""
         if x is None:
             x = self.root
         if x.left is not self.nil:
-            for y in self.ascending(x.left):
+            for y in self.descending(x.left):
                 yield y
 
         if x.parent.right is x:
             yield x.parent
-            for y in self.left(x.parent):
+            for y in self.left_descending(x.parent):
                 yield y
 
-    def right(self, x=None):
+    def right_ascending(self, x=None):
         """Yield nodes greater than the given node."""
         if x is None:
             x = self.root
         if x.right is not self.nil:
-            for y in self.descending(x.right):
+            for y in self.ascending(x.right):
                 yield y
 
         if x.parent.left is x:
             yield x.parent
-            for y in self.right(x.parent):
+            for y in self.right_ascending(x.parent):
                 yield y
 
     def rotate_left(self, x=None):
@@ -164,8 +164,9 @@ class AVLTree(object):
         y.left = x
         x.parent = y
 
+        # Update the balance.
         x.balance += 1 - min(y.balance, 0)
-        y.balance += 1 + min(x.balance, 0)
+        y.balance += 1 + max(x.balance, 0)
 
     def rotate_right(self, x=None):
         """Right-rotate the tree under node x."""
@@ -194,66 +195,9 @@ class AVLTree(object):
         y.right = x
         x.parent = y
 
-        x.balance += 1 - min(y.balance, 0)
-        y.balance += 1 + min(x.balance, 0)
-
-    def update(self, x):
-        """Recursively update balance factors going up the tree."""
-        if x is self.nil:
-            return
-
-        if x.balance > 1 or x.balance < -1:
-            self.rebalance(x)
-        if x is self.root:
-            return
-
-        if x is x.parent.left:
-
-        if recursive:
-            if x.left is not self.nil:
-                self.update(x.left, True)
-            if x.right is not self.nil:
-                self.update(x.right, True)
-        x.height = 1 + max(x.left.height, x.right.height)
-        x.balance = x.left.height - x.right.height
-
-    def rebalance(self, x=None):
-        if x is None:
-            x = self.root
-        if x is self.nil:
-            return
-
-        while x.balance > 1:
-            if x.left.balance < 0:
-                self.rotate_left(x.left)
-            self.rotate_right(x)
-        while x.balance < -1:
-            if x.right.balance > 0:
-                self.rotate_right(x.right)
-            self.rotate_left(x)
-
-    def find_pivot(self, end):
-        """Find the path that ends at the given point, or just before.
-
-        This is:
-            The path that ends the same as this one.
-            If no such path exists, the closest path that ends before this one.
-            Otherwise, return the empty node.
-        """
-        x = self.root
-        nearest_left = self.nil
-
-        while x is not self.nil:
-            if end == x.end:
-                return x
-
-            if end < x.end:
-                x = x.left
-            else:
-                nearest_left = x
-                x = x.right
-
-        return nearest_left
+        # Update the balance.
+        x.balance -= 1 + max(y.balance, 0)
+        y.balance -= 1 - min(x.balance, 0)
 
     def insert(self, node):
         x = self.root
@@ -277,6 +221,76 @@ class AVLTree(object):
             x.right = node
 
         self.update(node)
+
+    def delete(self, x):
+        if x is self.nil:
+            return
+        if x is 
+
+    def update(self, x):
+        """Recursively update balance factors going up the tree."""
+        if x is self.nil:
+            return
+
+        if x.balance > 1 or x.balance < -1:
+            self.rebalance(x)
+            return
+        if x is self.root:
+            return
+
+        if x is x.parent.left:
+            x.parent.balance += 1
+        elif x is x.parent.right:
+            x.parent.balance -= 1
+
+        if x.parent.balance != 0:
+            self.update(x.parent)
+
+    def rebalance(self, x=None):
+        if x is None:
+            x = self.root
+        if x is self.nil:
+            return
+
+        while x.balance > 1:
+            if x.left.balance < 0:
+                self.rotate_left(x.left)
+            self.rotate_right(x)
+        while x.balance < -1:
+            if x.right.balance > 0:
+                self.rotate_right(x.right)
+            self.rotate_left(x)
+
+    def update_all(self):
+        if x.left is not self.nil:
+            self.update(x.left, True)
+        if x.right is not self.nil:
+            self.update(x.right, True)
+        x.height = 1 + max(x.left.height, x.right.height)
+        x.balance = x.left.height - x.right.height
+
+    def find_pivot(self, end):
+        """Find the path that ends at the given point, or just before.
+
+        This is:
+            The path that ends the same as this one.
+            If no such path exists, the closest path that ends before this one.
+            Otherwise, return the empty node.
+        """
+        x = self.root
+        nearest_left = self.nil
+
+        while x is not self.nil:
+            if end == x.end:
+                return x
+
+            if end < x.end:
+                x = x.left
+            else:
+                nearest_left = x
+                x = x.right
+
+        return nearest_left
 
     def add_chunk(self, chunk):
         x, equal = self.find_pivot(chunk.end)
