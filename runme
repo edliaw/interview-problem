@@ -1,0 +1,487 @@
+#!/usr/bin/env python
+"""Solves the Mars rover problem.
+Edward Liaw
+2014-05-24
+
+Read input  O(n)
+Sort chunks  O(n log(n))
+Find fastest path through the chunks  O(np)
+    Where p < n :  p is the number of overlapping paths through the chunks.
+    In the worst case, p ~= n, and complexity is O(n^2).
+    The worst case can be reduced to O(n log(n)) using an AVL tree to process
+        the paths.
+Remove incomplete paths  O(n)
+Find the minimum of the costs  O(n)
+"""
+import sys
+import unittest
+import cProfile
+from collections import namedtuple
+from random import randint
+from itertools import izip_longest
+
+
+"""Chunk represents a chunk of data.
+
+start :: Int = start position
+end :: Int = end position
+time :: Float = time cost to process the chunk
+"""
+Chunk = namedtuple("Chunk", ["start", "end", "time"])
+
+
+"""Path represents a sequence of chunks.
+
+end :: Int = the last byte in the path
+time :: Float = time cost of the path
+"""
+#Path = namedtuple("Path", ["end", "time"])
+
+
+class Path(object):
+    """Path is a node in an RB tree.
+
+    For our purposes, it represents a possible sequence of chunks.
+
+    end :: Int = the last byte in this path.
+    time :: Float = time cost to reach the last byte in this path.
+    """
+    def __init__(self, end=None, time=None):
+        self.end = end
+        self.time = time
+
+        self.left = None
+        self.right = None
+        self.parent = None
+
+        self.balance = 0
+
+    def __repr__(self):
+        return str((self.end, self.time))
+
+
+class AVLTree(object):
+    """Self-balancing binary search tree using the AVL algorithm
+
+    Implementation based on
+    http://code.activestate.com/recipes/576817-red-black-tree/.
+    """
+    def __init__(self, new_node=Path):
+        self.new_node = new_node
+        self.nil = new_node(None)
+        self.root = self.nil
+
+    def __repr__(self):
+        pass
+
+    def as_tree(self, x=None):
+        if x is None:
+            x = self.root
+        if x is not self.nil:
+            yield x
+            for l, r in izip_longest(self.as_tree(x.left), self.as_tree(x.right)):
+                yield (l, r)
+
+    def descending(self, x=None):
+        """Yield nodes in descending order."""
+        if x is None:
+            x = self.root
+
+        if x is not self.nil:
+            if x.right is not self.nil:
+                for y in self.descending(x.right):
+                    yield y
+            yield x
+            if x.left is not self.nil:
+                for y in self.descending(x.left):
+                    yield y
+
+    def ascending(self, x=None):
+        """Yield nodes in ascending order."""
+        if x is None:
+            x = self.root
+        l, r = x.left, x.right
+
+        if x is not self.nil:
+            if x.left is not self.nil:
+                for y in self.ascending(x.left):
+                    yield y
+            yield x
+            if x.right is not self.nil:
+                for y in self.ascending(x.right):
+                    yield y
+
+    def left(self, x=None):
+        """Yield nodes less than the given node."""
+        if x is None:
+            x = self.root
+        if x.left is not self.nil:
+            for y in self.ascending(x.left):
+                yield y
+
+        if x.parent.right is x:
+            yield x.parent
+            for y in self.left(x.parent):
+                yield y
+
+    def right(self, x=None):
+        """Yield nodes greater than the given node."""
+        if x is None:
+            x = self.root
+        if x.right is not self.nil:
+            for y in self.descending(x.right):
+                yield y
+
+        if x.parent.left is x:
+            yield x.parent
+            for y in self.right(x.parent):
+                yield y
+
+    def rotate_left(self, x=None):
+        """Left-rotate the tree under node x."""
+        if x is None:
+            x = self.root
+        assert x.right is not self.nil, "Cannot rotate any further left"
+
+        # Right node replaces x as the top node
+        y = x.right
+
+        # Move new top node's child under old top node.
+        x.right = y.left
+        if x.right is not self.nil:
+            x.right.parent = x
+
+        # Set new node's parent and fix child relationships.
+        y.parent = x.parent
+        if y.parent is self.nil:
+            self.root = y
+        elif x is y.parent.left:
+            y.parent.left = y
+        else:
+            y.parent.right = y
+
+        # Old node moves left of new node.
+        y.left = x
+        x.parent = y
+
+        x.balance += 1 - min(y.balance, 0)
+        y.balance += 1 + min(x.balance, 0)
+
+    def rotate_right(self, x=None):
+        """Right-rotate the tree under node x."""
+        if x is None:
+            x = self.root
+        assert x.left is not self.nil, "Cannot rotate any further right"
+
+        # Left node replaces x as the top node
+        y = x.left
+
+        # Move new top node's child under old top node.
+        x.left = y.right
+        if x.left is not self.nil:
+            x.left.parent = x
+
+        # Set new node's parent and fix child relationships.
+        y.parent = x.parent
+        if y.parent is self.nil:
+            self.root = y
+        elif x is y.parent.left:
+            y.parent.left = y
+        else:
+            y.parent.right = y
+
+        # Old node moves right of new node.
+        y.right = x
+        x.parent = y
+
+        x.balance += 1 - min(y.balance, 0)
+        y.balance += 1 + min(x.balance, 0)
+
+    def update(self, x):
+        """Recursively update balance factors going up the tree."""
+        if x is self.nil:
+            return
+
+        if x.balance > 1 or x.balance < -1:
+            self.rebalance(x)
+        if x is self.root:
+            return
+
+        if x is x.parent.left:
+
+        if recursive:
+            if x.left is not self.nil:
+                self.update(x.left, True)
+            if x.right is not self.nil:
+                self.update(x.right, True)
+        x.height = 1 + max(x.left.height, x.right.height)
+        x.balance = x.left.height - x.right.height
+
+    def rebalance(self, x=None):
+        if x is None:
+            x = self.root
+        if x is self.nil:
+            return
+
+        while x.balance > 1:
+            if x.left.balance < 0:
+                self.rotate_left(x.left)
+            self.rotate_right(x)
+        while x.balance < -1:
+            if x.right.balance > 0:
+                self.rotate_right(x.right)
+            self.rotate_left(x)
+
+    def find_pivot(self, end):
+        """Find the path that ends at the given point, or just before.
+
+        This is:
+            The path that ends the same as this one.
+            If no such path exists, the closest path that ends before this one.
+            Otherwise, return the empty node.
+        """
+        x = self.root
+        nearest_left = self.nil
+
+        while x is not self.nil:
+            if end == x.end:
+                return x
+
+            if end < x.end:
+                x = x.left
+            else:
+                nearest_left = x
+                x = x.right
+
+        return nearest_left
+
+    def insert(self, node):
+        x = self.root
+        y = x
+        while y is not self.nil:
+            x = y
+            if node.end < y.end:
+                y = y.left
+            else:
+                y = y.right
+
+        node.parent = x
+        node.left = self.nil
+        node.right = self.nil
+
+        if x is self.nil:
+            self.root = node
+        elif node.end < x.end:
+            x.left = node
+        else:
+            x.right = node
+
+        self.update(node)
+
+    def add_chunk(self, chunk):
+        x, equal = self.find_pivot(chunk.end)
+        if equal:
+            x.time + chunk.time
+
+
+class TestTimer(unittest.TestCase):
+    def setUp(self):
+        self.nbytes = randint(0, 2**32)
+        self.latency = randint(0, 2**32)
+        self.bandwidth = randint(0, 2**32)
+
+    def test_timer(self):
+        """Test timing function."""
+        time = timer(self.latency, self.bandwidth)
+        chunk_size = randint(0, self.nbytes)
+        correct = 2 * self.latency + chunk_size / float(self.bandwidth)
+        self.assertEqual(time(chunk_size), correct)
+
+
+class TestChunks(unittest.TestCase):
+    def setUp(self):
+        self.nbytes = randint(0, 2**32)
+        self.latency = randint(0, 2**32)
+        self.bandwidth = randint(0, 2**32)
+        self.nchunks = randint(0, 100000)
+        self.timer = timer(self.latency, self.bandwidth)
+
+    def test_chunks(self):
+        """Test reading chunks."""
+        chunks = make_chunks(self.nbytes, self.nchunks, self.timer)
+        chunk_str = map(print_chunk, chunks)
+        self.assertEqual(chunks, get_chunks(chunk_str, self.timer))
+
+
+class TestPaths(unittest.TestCase):
+    def test_path_merge(self):
+        """Test merging paths that are being extended."""
+        paths = [
+                Path(200, 2.0),
+                Path(100, 1.0),
+                ]
+        chunk = Chunk(50, 300, 3.0)
+        result = [
+                Path(300, 4.0),
+                Path(200, 2.0),
+                Path(100, 1.0),
+                ]
+        self.assertEqual(update_paths(paths, chunk), result)
+
+    def test_path_drop(self):
+        """Test dropping dead-end paths."""
+        paths = [
+                Path(200, 2.0),
+                Path(100, 1.0),
+                ]
+        chunk = Chunk(300, 500, 3.0)
+        result = []
+        self.assertEqual(update_paths(paths, chunk), result)
+
+    def test_path_equal(self):
+        """Test merging equivalent-ending paths."""
+        paths = [
+                Path(200, 2.0),
+                Path(100, 1.0),
+                ]
+        chunk = Chunk(100, 200, 0.5)
+        result = [
+                Path(200, 1.5),
+                Path(100, 1.0),
+                ]
+        self.assertEqual(update_paths(paths, chunk), result)
+
+
+def benchmark():
+    nbytes = randint(0, 2**32)
+    latency = randint(0, 2**32)
+    bandwidth = randint(0, 2**32)
+    nchunks = randint(0, 100000)
+    time = timer(latency, bandwidth)
+    chunks = make_chunks(nbytes, nchunks, time)
+
+    print('\n'.join(map(str, (nbytes, latency, bandwidth, nchunks))))
+    print(find_paths(chunks))
+
+def make_chunks(nbytes, nchunks, timer):
+    """Generate a bunch of chunks for testing."""
+    ends = [randint(0, nbytes) for _ in range(nchunks)]
+    end = ends.pop()
+    head = Chunk(0, end, timer(end))
+    chunks = [head]
+    for end in ends:
+        start = randint(0, end)
+        chunks.append(Chunk(start, end, timer(end - start)))
+    return sorted(set(chunks))
+
+def print_chunk(chunk):
+    """Print chunks in the input format."""
+    return "{},{}\n".format(chunk.start, chunk.end)
+
+def get_param(infile):
+    """Parse first 4 parameters of input."""
+    return [int(line.rstrip()) for _, line in zip(range(4), infile)]
+
+def get_chunks(infile, time):
+    """Parse lines of comma-separated chunks.  Remove duplicates and sort.
+
+    Python sort is O(n log(n)).
+
+    File -> (Int -> Float) -> [Chunk]
+    """
+    chunks = set()
+    for line in infile:
+        start, end = map(int, line.rstrip().split(','))
+        chunks.add(Chunk(start, end, time(end - start)))
+    return sorted(chunks)
+
+def timer(latency, bandwidth):
+    """Create function to calculate download time.
+
+    Int -> Int -> (Int -> Float)
+    """
+    bandwidth = float(bandwidth)
+    def time(chunk_size):
+        return 2 * latency + chunk_size / bandwidth
+    return time
+
+def update_paths(paths, chunk):
+    """Extend fastest path with the chunk and prune dead-end paths.
+
+    O(np), where p is the largest number of overlapping paths.
+    Worst case O(n^2):
+        0, 100
+        1, 101
+        ...
+        100, 200
+
+        I would have to minimize p to improve performance further.
+
+    [Path] -> Chunk -> [Path]
+    """
+    less = []  # Extendable paths.
+    greater = []  # Non-extendable paths.
+    equal = []  # Time cost for equivalent paths.
+    for p in paths:
+        if p.end < chunk.start:
+            # Dead paths end before the most recent chunk because we're sorted.
+            break
+        if p.end < chunk.end:
+            less.append(p)
+        elif p.end == chunk.end:
+            equal.append(p.end)
+        else:
+            greater.append(p)
+    if less:
+        # Extend the fastest path.
+        equal.append(min(p.time for p in less) + chunk.time)
+    if equal:
+        # Take the fastest path with the same endpoint.
+        greater.append(Path(chunk.end, min(equal)))
+
+    # Keeps paths sorted.
+    return greater + less
+
+def find_paths(chunks):
+    """An O(n^2) worst case method to find sequences of chunks and their costs.
+
+    Initialize paths with starter chunks.
+    Update paths by extending the fastest path with endpoint == chunk
+        and pruning dead-end paths.
+
+    [Chunk] -> [Path]
+    """
+    # chunks is min-max sorted by start, end position.
+    paths = []  # Sorted max-min by the end of the last chunk.
+
+    # Starting chunks
+    for i, c in enumerate(chunks):
+        if c.start != 0:
+            break
+        # Sort paths by reversing start chunk order.
+        paths.insert(0, Path(c.end, c.time))
+    for c in chunks[i:]:
+        paths = update_paths(paths, c)
+    return paths
+
+def main():
+    # Parse input.
+    nbytes, latency, bandwidth, nchunks = get_param(sys.stdin)
+    chunks = get_chunks(sys.stdin, timer(latency, bandwidth))
+    # Generate paths.
+    paths = find_paths(chunks)
+    # Take complete paths only.
+    paths = filter(lambda p: p.end == nbytes, paths)
+    if not paths:
+        # Print nothing if no complete paths.
+        return
+    # Print minimum-cost.
+    answer = min(p.time for p in paths)
+    print "{:0.3f}".format(answer)
+
+def test():
+    paths
+
+#main()
+#unittest.main()
+#cProfile.run('benchmark()')
