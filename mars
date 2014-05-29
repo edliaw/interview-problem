@@ -39,7 +39,7 @@ time :: Float = time cost of the path
 
 
 class Path(object):
-    """Path is a node in an RB tree.
+    """Path is a node in an AVL tree.
 
     For our purposes, it represents a possible sequence of chunks.
 
@@ -47,7 +47,7 @@ class Path(object):
     time :: Float = time cost to reach the last byte in this path.
     """
     def __init__(self, end=None, time=None):
-        self.end = end
+        self.key = end
         self.time = time
 
         self.left = None
@@ -204,7 +204,7 @@ class AVLTree(object):
         y = x
         while y is not self.nil:
             x = y
-            if node.end < y.end:
+            if node.key < y.key:
                 y = y.left
             else:
                 y = y.right
@@ -215,7 +215,7 @@ class AVLTree(object):
 
         if x is self.nil:
             self.root = node
-        elif node.end < x.end:
+        elif node.key < x.key:
             x.left = node
         else:
             x.right = node
@@ -225,7 +225,6 @@ class AVLTree(object):
     def delete(self, x):
         if x is self.nil:
             return
-        if x is 
 
     def update(self, x):
         """Recursively update balance factors going up the tree."""
@@ -269,7 +268,7 @@ class AVLTree(object):
         x.height = 1 + max(x.left.height, x.right.height)
         x.balance = x.left.height - x.right.height
 
-    def find_pivot(self, end):
+    def find_pivot(self, key):
         """Find the path that ends at the given point, or just before.
 
         This is:
@@ -281,10 +280,10 @@ class AVLTree(object):
         nearest_left = self.nil
 
         while x is not self.nil:
-            if end == x.end:
+            if key == x.key:
                 return x
 
-            if end < x.end:
+            if key < x.key:
                 x = x.left
             else:
                 nearest_left = x
@@ -293,7 +292,7 @@ class AVLTree(object):
         return nearest_left
 
     def add_chunk(self, chunk):
-        x, equal = self.find_pivot(chunk.end)
+        x, equal = self.find_pivot(chunk.key)
         if equal:
             x.time + chunk.time
 
